@@ -12,10 +12,42 @@ for real; nothing here mocks schemacheck's own core.
 
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 
 from schemacheck.cli import main
+
+# A JSON Schema equivalent to `_SCHEMA_YAML`: id (integer, required) and age
+# (integer, 0..120). Used to prove the .json dispatch and format parity.
+_SCHEMA_JSON = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "id": {"type": "integer"},
+        "age": {"type": "integer", "minimum": 0, "maximum": 120},
+    },
+    "required": ["id"],
+}
+
+
+def _write_json_schema(tmp_path: Path) -> Path:
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps(_SCHEMA_JSON))
+    return schema
+
+
+def _write_valid_json(tmp_path: Path) -> Path:
+    data = tmp_path / "good.json"
+    data.write_text(json.dumps([{"id": 1, "age": 30}, {"id": 2, "age": 45}]))
+    return data
+
+
+def _write_invalid_json(tmp_path: Path) -> Path:
+    # Row 1 has age 200 (exceeds max 120); row 2 is fine. Only row 1 violates.
+    data = tmp_path / "bad.json"
+    data.write_text(json.dumps([{"id": 1, "age": 200}, {"id": 2, "age": 45}]))
+    return data
 
 _SCHEMA_YAML = """\
 fields:
@@ -100,6 +132,86 @@ def test_end_to_end_exit_codes(tmp_path: Path, capsys) -> None:
     out_bad = capsys.readouterr().out
     assert rc_bad == 1, f"invalid CSV must exit 1, got {rc_bad}"
     assert "field 'age'" in out_bad, f"violation text expected in stdout, got: {out_bad!r}"
+
+
+def test_json_schema_dispatch(tmp_path: Path) -> None:
+    """A `.json` schema selects the JSON Schema parser; valid data exits 0."""
+    schema = _write_json_schema(tmp_path)
+    data = _write_valid_csv(tmp_path)
+    rc = main(["validate", str(data), "--schema", str(schema)])
+    assert rc == 0, f"valid data + valid .json schema must exit 0, got {rc}"
+
+
+def test_all_four_combinations(tmp_path: Path, capsys) -> None:
+    """{CSV, JSON} data x {YAML, JSON Schema} schema all validate end to end.
+
+    Clean data -> exit 0; dirty data -> exit 1 with a byte-identical
+    'row N, field ...' violation line plus the 'N violation(s) found' summary.
+    The violation-line SHAPE must not depend on which schema format was parsed.
+    """
+    yaml_schema = _write_schema(tmp_path)
+    json_schema = _write_json_schema(tmp_path)
+    good_csv = _write_valid_csv(tmp_path)
+    bad_csv = _write_invalid_csv(tmp_path)
+    good_json = _write_valid_json(tmp_path)
+    bad_json = _write_invalid_json(tmp_path)
+
+    combos = [
+        ("CSV+YAML", good_csv, bad_csv, yaml_schema),
+        ("JSON+YAML", good_json, bad_json, yaml_schema),
+        ("CSV+JSONSchema", good_csv, bad_csv, json_schema),
+        ("JSON+JSONSchema", good_json, bad_json, json_schema),
+    ]
+
+    for label, good, bad, schema in combos:
+        rc_good = main(["validate", str(good), "--schema", str(schema)])
+        capsys.readouterr()  # drain
+        assert rc_good == 0, f"{label}: clean data must exit 0, got {rc_good}"
+
+        rc_bad = main(["validate", str(bad), "--schema", str(schema)])
+        out_bad = capsys.readouterr().out
+        assert rc_bad == 1, f"{label}: dirty data must exit 1, got {rc_bad}"
+        # Byte-identical located violation line, regardless of schema format.
+        assert "row 1, field 'age': value 200 exceeds the max 120" in out_bad, (
+            f"{label}: expected located violation line, got: {out_bad!r}"
+        )
+        assert "1 violation found" in out_bad, (
+            f"{label}: expected the summary count line, got: {out_bad!r}"
+        )
+
+
+def test_unsupported_keyword_exit2(tmp_path: Path, capsys) -> None:
+    """A JSON Schema using `$ref` exits 2 and names the keyword on stderr."""
+    schema = tmp_path / "schema.json"
+    schema.write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {"id": {"$ref": "#/$defs/Id"}},
+            }
+        )
+    )
+    data = _write_valid_csv(tmp_path)
+    rc = main(["validate", str(data), "--schema", str(schema)])
+    assert rc == 2, f"unsupported keyword must exit 2, got {rc}"
+    err = capsys.readouterr().err
+    assert "$ref" in err, f"stderr must name the offending keyword, got: {err!r}"
+    assert "Traceback" not in err, f"must not leak a traceback, got: {err!r}"
+
+
+def test_malformed_json_schema_exit2(tmp_path: Path, capsys) -> None:
+    """A malformed (unparseable) JSON schema exits 2; data is never validated."""
+    schema = tmp_path / "schema.json"
+    schema.write_text("{ this is not valid json ")
+    data = _write_valid_csv(tmp_path)
+    rc = main(["validate", str(data), "--schema", str(schema)])
+    assert rc == 2, f"malformed JSON schema must exit 2, got {rc}"
+    err = capsys.readouterr().err
+    assert "Traceback" not in err, f"must not leak a traceback, got: {err!r}"
+    assert err.strip(), "must print a diagnostic message for a malformed schema"
+    # The .json file must be routed through the JSON parser (not mis-read as
+    # YAML): the diagnostic names JSON, distinguishing the dispatch.
+    assert "JSON" in err, f"malformed .json must be parsed as JSON, got: {err!r}"
 
 
 def test_missing_inputs_usage_error(tmp_path: Path, capsys) -> None:
