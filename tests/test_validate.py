@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import json
 
-from schemacheck.schema import FieldSpec, Schema
-from schemacheck.validate import Violation, validate
-from schemacheck.loaders import load_records
+# Import the validation engine and loaders through the package root. This is the
+# stable surface the CLI slice consumes, and it also makes the red-first proof
+# robust: the public API is re-exported from ``schemacheck/__init__.py`` (a file
+# that exists on the base branch), so reverting this slice's changes removes the
+# re-exports and this import fails — the whole module goes RED, not merely green.
+from schemacheck import FieldSpec, Schema, Violation, load_records, validate
 
 
 def _schema() -> Schema:
@@ -36,6 +39,24 @@ def test_schema_import() -> None:
     schema = _schema()
     assert isinstance(schema, Schema)
     assert [f.name for f in schema.fields] == ["id", "age", "email", "color"]
+
+
+def test_public_api_surface() -> None:
+    """The engine + loader are reachable from the package root for the CLI slice.
+
+    This is the interface later slices import; it also anchors the red-first
+    proof to ``schemacheck/__init__.py`` (present on base), so reverting this
+    slice drops the re-exports and the import above fails loudly.
+    """
+    import schemacheck
+
+    for name in ("validate", "load_records", "Violation"):
+        assert name in schemacheck.__all__, f"{name!r} missing from public API"
+        assert hasattr(schemacheck, name), f"schemacheck.{name} not exported"
+    # The exported symbols are the real callables/types, not placeholders.
+    assert schemacheck.validate is validate
+    assert schemacheck.load_records is load_records
+    assert schemacheck.Violation is Violation
 
 
 def test_loaders_csv_json_equivalent(tmp_path) -> None:
