@@ -5,6 +5,9 @@ description = "Scaffolded by keelen."
 requires-python = ">=3.11"
 dependencies = ["PyYAML>=6"]
 
+[project.scripts]
+schemacheck = "schemacheck.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
