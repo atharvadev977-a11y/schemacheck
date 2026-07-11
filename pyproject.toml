@@ -3,7 +3,7 @@ name = "schemacheck"
 version = "0.0.0"
 description = "Scaffolded by keelen."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["PyYAML>=6"]
 
 [build-system]
 requires = ["hatchling"]
