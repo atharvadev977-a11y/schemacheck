@@ -104,6 +104,28 @@ def _check_constraints(
                 message=f"value {coerced} exceeds the max {constraints['max']}",
             )
         )
+    if "minLength" in constraints and len(str(coerced)) < constraints["minLength"]:
+        out.append(
+            Violation(
+                row=row,
+                field=spec.name,
+                message=(
+                    f"value {raw!r} is shorter than the minLength "
+                    f"{constraints['minLength']}"
+                ),
+            )
+        )
+    if "maxLength" in constraints and len(str(coerced)) > constraints["maxLength"]:
+        out.append(
+            Violation(
+                row=row,
+                field=spec.name,
+                message=(
+                    f"value {raw!r} is longer than the maxLength "
+                    f"{constraints['maxLength']}"
+                ),
+            )
+        )
     if "regex" in constraints:
         pattern = constraints["regex"]
         if re.search(pattern, str(coerced)) is None:

@@ -129,6 +129,52 @@ def test_min_boundary_out_of_range() -> None:
     assert validate([{"age": "120"}], schema) == []
 
 
+def test_min_length_violation() -> None:
+    """A string shorter than minLength flags exactly one violation naming the field."""
+    schema = Schema(
+        fields=[FieldSpec(name="code", type="string", constraints={"minLength": 2})]
+    )
+    violations = validate([{"code": "a"}], schema)
+    assert len(violations) == 1, violations
+    assert violations[0].field == "code", violations[0]
+    assert violations[0].row == 1, violations[0]
+    # The message names the min-length rule and its bound.
+    msg = violations[0].message.lower()
+    assert "minlength" in msg, violations[0].message
+    assert "2" in violations[0].message, violations[0].message
+
+
+def test_max_length_violation() -> None:
+    """A string longer than maxLength flags exactly one violation naming the field."""
+    schema = Schema(
+        fields=[FieldSpec(name="code", type="string", constraints={"maxLength": 5})]
+    )
+    violations = validate([{"code": "abcdef"}], schema)  # 6 chars > 5
+    assert len(violations) == 1, violations
+    assert violations[0].field == "code", violations[0]
+    msg = violations[0].message.lower()
+    assert "maxlength" in msg, violations[0].message
+    assert "5" in violations[0].message, violations[0].message
+
+
+def test_length_within_bounds() -> None:
+    """A string within both minLength and maxLength yields no violation; boundaries pass."""
+    schema = Schema(
+        fields=[
+            FieldSpec(
+                name="code",
+                type="string",
+                constraints={"minLength": 2, "maxLength": 5},
+            )
+        ]
+    )
+    # Comfortably inside the bounds.
+    assert validate([{"code": "abc"}], schema) == []
+    # Both boundaries are inclusive and valid.
+    assert validate([{"code": "ab"}], schema) == []  # exactly minLength
+    assert validate([{"code": "abcde"}], schema) == []  # exactly maxLength
+
+
 def test_boolean_and_number_coercion() -> None:
     """boolean and number arms coerce valid strings and flag invalid ones."""
     schema = Schema(
