@@ -23,8 +23,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from schemacheck.json_schema import load_json_schema
 from schemacheck.loaders import LoaderError, load_records
-from schemacheck.schema import SchemaError, load_schema
+from schemacheck.schema import Schema, SchemaError, load_schema
 from schemacheck.validate import Violation, validate
 
 # Exit codes, named so the mapping is explicit at every return site.
@@ -54,9 +55,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "--schema",
         required=True,
         metavar="SCHEMA",
-        help="Path to the YAML schema definition.",
+        help=(
+            "Path to the schema definition. A '.json' file is read as a JSON "
+            "Schema (draft 2020-12); '.yaml'/'.yml' as the YAML format."
+        ),
     )
     return parser
+
+
+def _load_schema_by_extension(schema_path: str) -> Schema:
+    """Dispatch to the schema parser chosen by the ``--schema`` file extension.
+
+    ``.json`` selects the JSON Schema (draft 2020-12) parser; ``.yaml``/``.yml``
+    — and any other extension, for backward compatibility — selects the YAML
+    parser. Both parsers return the same :class:`~schemacheck.schema.Schema`
+    model and raise :class:`~schemacheck.schema.SchemaError` on a bad document,
+    so the caller's error handling is identical either way. The data-file
+    loader is independent of this choice.
+    """
+    if Path(schema_path).suffix.lower() == ".json":
+        return load_json_schema(schema_path)
+    return load_schema(schema_path)
 
 
 def _render_report(violations: list[Violation]) -> str:
@@ -91,7 +110,7 @@ def _validate(file: str, schema_path: str) -> int:
     # Parse the schema first: a malformed or unreadable schema is a usage error,
     # and there is no point reading data we cannot check.
     try:
-        schema = load_schema(schema_path)
+        schema = _load_schema_by_extension(schema_path)
     except FileNotFoundError:
         print(f"error: schema file not found: {schema_path!r}", file=sys.stderr)
         return EXIT_USAGE
