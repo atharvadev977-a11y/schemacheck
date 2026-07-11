@@ -19,8 +19,8 @@ entry declaring a field's ``name``, ``type`` and optional ``required`` flag and
         constraints: {regex: "^.+@.+$"}
 
 Supported ``type`` values: ``string``, ``integer``, ``number``, ``boolean``.
-Supported ``constraints``: ``min``/``max`` (numeric), ``regex`` (string),
-``enum`` (list of allowed values).
+Supported ``constraints``: ``min``/``max`` (numeric), ``minLength``/``maxLength``
+(string length), ``regex`` (string), ``enum`` (list of allowed values).
 
 Malformed input (unknown type, non-mapping root, a field missing ``name``)
 raises :class:`SchemaError` with a message naming the offending field.
@@ -41,7 +41,9 @@ SUPPORTED_TYPES = frozenset({"string", "integer", "number", "boolean"})
 
 # Constraint keys the schema layer understands. The validation engine (a later
 # slice) is responsible for applying them; this layer only parses and models.
-SUPPORTED_CONSTRAINTS = frozenset({"min", "max", "regex", "enum"})
+SUPPORTED_CONSTRAINTS = frozenset(
+    {"min", "max", "minLength", "maxLength", "regex", "enum"}
+)
 
 
 class SchemaError(Exception):

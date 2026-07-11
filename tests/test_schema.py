@@ -57,6 +57,22 @@ def test_fieldspec_constraints(tmp_path):
     assert email_spec.constraints == {"regex": "^.+@.+$"}
 
 
+def test_length_constraints_parsed(tmp_path):
+    """The YAML parser accepts and models minLength/maxLength constraints."""
+    doc = textwrap.dedent(
+        """\
+        fields:
+          - name: code
+            type: string
+            constraints: {minLength: 2, maxLength: 5}
+        """
+    )
+    schema = load_schema(_write(tmp_path, doc))
+    code_spec = schema.fields[0]
+    assert code_spec.name == "code"
+    assert code_spec.constraints == {"minLength": 2, "maxLength": 5}
+
+
 def test_unknown_type_raises(tmp_path):
     bad = textwrap.dedent(
         """\

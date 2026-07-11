@@ -70,6 +70,7 @@ The schema is a YAML mapping with a `fields` list. Each entry declares:
 - `required` — `true` if the field must be present and non-empty (default `false`).
 - `constraints` — an optional mapping of per-field rules:
   - `min` / `max` — numeric bounds (inclusive).
+  - `minLength` / `maxLength` — string length bounds (inclusive).
   - `regex` — a pattern the value must match.
   - `enum` — a list of allowed values.
 
